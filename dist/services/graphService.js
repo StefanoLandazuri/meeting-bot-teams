@@ -29,11 +29,19 @@ class GraphService {
             return response;
         }
         catch (error) {
-            logger.error(`Graph API GET request failed`, error, { endpoint });
-            throw new types_1.GraphApiError(`Graph API request failed: ${error.message}`, {
+            logger.error(`Graph API GET request failed`, error, {
                 endpoint,
                 statusCode: error.statusCode,
-                error: error.body || error,
+                code: error.code,
+                message: error.message,
+                body: error.body,
+                response: error.response?.data,
+            });
+            throw new types_1.GraphApiError(`Graph API request failed: ${error.message || error.code || 'Unknown error'}`, {
+                endpoint,
+                statusCode: error.statusCode,
+                code: error.code,
+                error: error.body || error.response?.data || error,
             });
         }
     }

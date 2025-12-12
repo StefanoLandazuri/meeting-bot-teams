@@ -10,6 +10,8 @@ import { callService } from '../services/callService';
 import { transcriptService } from '../services/transcriptService';
 import { graphService } from '../services/graphService';
 import { openaiService } from '../services/openaiService';
+import { VTTParser } from '../services/vttParser';
+import { FileTranscriptStore, TranscriptLoggerMiddleware } from 'botbuilder';
 
 const logger = createLogger('CallingController');
 
@@ -105,7 +107,7 @@ async function handleCallEstablished(callId: string): Promise<void> {
 
     // Obtener información de la llamada
     const callInfo = await callService.getCall(callId);
-    
+
     // Guardar información para procesamiento posterior
     // Nota: En producción deberías guardar esto en una base de datos
     activeCalls.set(callId, {
@@ -131,7 +133,7 @@ async function handleCallTerminated(callId: string): Promise<void> {
 
     // Obtener información guardada
     const callData = activeCalls.get(callId);
-    
+
     if (!callData) {
       logger.warn('Call data not found for terminated call', { callId });
       return;
@@ -201,7 +203,7 @@ async function processMeetingAsync(
     // 2. Enviarlo al chat de Teams
     // 3. Enviarlo por email
     // 4. Guardarlo en SharePoint
-    
+
     logger.info('Meeting processing completed', { meetingId });
   } catch (error) {
     logger.error('Failed to process meeting', error, {
@@ -275,8 +277,8 @@ export const handleProcessTranscript = async (
 
     // Validar que tenga al menos uno de los métodos
     if (!callId && (!userId || !meetingId)) {
-      res.status(400).json({ 
-        error: 'Either callId OR (userId and meetingId) are required' 
+      res.status(400).json({
+        error: 'Either callId OR (userId and meetingId) are required'
       });
       return;
     }
@@ -289,7 +291,7 @@ export const handleProcessTranscript = async (
     if (callId) {
       logger.info('Using call ID to fetch transcript', { callId });
       const transcripts = await transcriptService.getTranscriptsByCallId(callId);
-      
+
       if (transcripts.length === 0) {
         res.status(404).json({ error: 'No transcripts found for this call' });
         return;
@@ -316,7 +318,7 @@ export const handleProcessTranscript = async (
           throw new Error('Transcript content not available');
         }
       }
-    } 
+    }
     // Opción 2: Usar userId y meetingId (método original)
     else {
       transcript = await transcriptService.getLatestTranscript(userId, meetingId);
@@ -324,7 +326,7 @@ export const handleProcessTranscript = async (
 
     // Generar acta
     const minutes = await openaiService.generateMinutes(
-      transcript, 
+      transcript,
       meetingId || callId
     );
 
@@ -387,6 +389,126 @@ export const handleDebugMeeting = async (
       code: error.code,
       statusCode: error.statusCode,
       details: error.details,
+    });
+  }
+};
+
+export const handleGenerateSummary = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // El archivo viene en req.file
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded. Please upload a text file.' });
+      return;
+    }
+
+
+    const fileContent = req.file.buffer.toString('utf-8');
+    const file = req.file.originalname.toLowerCase();
+
+    // Convierte el buffer a string
+    let transcript: string;
+    let metadata: any = {
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+    }
+    //TODO: Implementar vtt
+    if (file.endsWith('.vtt')) {
+      logger.info('Parsing VTT file for transcript', { fileName: req.file.originalname });
+      const parsed = VTTParser.parse(fileContent);
+      transcript = parsed.fullTranscript;
+      metadata = {
+        ...metadata,
+        fileType: 'vtt',
+        duration: parsed.duration,
+        numberOfCues: parsed.cues.length,
+        speakers: parsed.speakers,
+        transcriptLength: transcript.length,
+      };
+      logger.info('VTT parsed succesfully', metadata);
+    } else {
+      transcript = fileContent;
+      metadata = {
+        ...metadata,
+        fileType: 'txt',
+        transcriptLength: transcript.length,
+      }
+    }
+
+    if (!transcript || transcript.trim().length === 0) {
+      res.status(400).json({ error: 'Uploaded file is empty or has no valid transcript content.' });
+      return;
+    }
+
+    logger.info('Generate summary request', {
+      transcriptLength: transcript.length,
+      fileName: req.file.originalname,
+      fileSize: req.file.size
+    });
+
+    const summary = await openaiService.generateSummary(transcript);
+
+    res.json({
+      success: true,
+      summary,
+      metadata: {
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        transcriptLength: transcript.length
+      }
+    });
+  } catch (error: any) {
+    logger.error('Failed to generate summary', error);
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      res.status(413).json({
+        error: 'File too large',
+        details: 'The file exceeds the maximum allowed size of 50MB',
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: 'Failed to generate summary',
+      details: error.message,
+      code: error.code,
+      fullError: process.env.NODE_ENV === 'development' ? error : undefined,
+    });
+  }
+};
+
+export const handleGetFormattedTranscript = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No VTT file uploaded' });
+      return;
+    }
+
+    const fileContent = req.file.buffer.toString('utf-8');
+    const fileName = req.file.originalname.toLowerCase();
+
+    if (!fileName.endsWith('.vtt')) {
+      res.status(400).json({ error: 'Only .vtt files are supported for this endpoint' });
+      return;
+    }
+
+    const formatted = VTTParser.formatWithTimestamps(fileContent);
+    const parsed = VTTParser.parse(fileContent);
+
+    res.json({
+      success: true,
+      formattedTranscript: formatted,
+      metadata: {
+        fileName: req.file.originalname,
+        duration: parsed.duration,
+        numberOfCues: parsed.cues.length,
+        speakers: parsed.speakers,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Failed to format transcript', error);
+    res.status(500).json({
+      error: 'Failed to format transcript',
+      details: error.message,
     });
   }
 };

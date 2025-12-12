@@ -17,10 +17,13 @@ import {
   handleJoinMeeting,
   handleProcessTranscript,
   handleDebugMeeting,
+  handleGenerateSummary,
+  handleGetFormattedTranscript,
 } from './controllers/callingController';
 import { authService } from './services/authService';
 import { ApiResponse, HealthCheckResponse } from './types';
 import { graphService } from './services/graphService';
+import { upload } from './middleware/uploadMiddleware';
 
 const logger = createLogger('Main');
 
@@ -36,7 +39,7 @@ try {
 const app = express();
 
 // Middlewares
-app.use(express.json());
+app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({ extended: true }));
 
 // Request logging middleware
@@ -57,7 +60,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 const botFrameworkAuthConfig: ConfigurationBotFrameworkAuthenticationOptions = {
   MicrosoftAppId: config.microsoftAppId,
   MicrosoftAppPassword: config.microsoftAppPassword,
-  MicrosoftAppType: 'MultiTenant',
+  MicrosoftAppType: 'SingleTenant',
   MicrosoftAppTenantId: config.microsoftAppTenantId,
 };
 
@@ -229,6 +232,22 @@ app.post('/api/debug-meeting', handleDebugMeeting);
  * GET /api/list-meetings/:userId
  * Lista las reuniones online de un usuario
  */
+app.post('/api/generate-summary',upload.single('transcript'), handleGenerateSummary); 
+/**
+ * POST /api/generate-summary
+ * Genera un resumen de la transcripción proporcionada
+ * Body: {
+ *  "transcript": "Full transcript text..."}
+ */
+
+app.post('/api/format-transcript', upload.single('transcript'), handleGetFormattedTranscript);
+/**
+ * POST /api/format-transcript
+ * Genera un resumen de la transcripción proporcionada
+ * Body: {
+ *  "transcript": "Full transcript text..."}
+ */
+
 app.get('/api/list-meetings/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
@@ -295,6 +314,8 @@ app.listen(PORT, () => {
   logger.info(`  POST http://localhost:${PORT}/api/calling`);
   logger.info(`  POST http://localhost:${PORT}/api/join-meeting`);
   logger.info(`  POST http://localhost:${PORT}/api/process-transcript`);
+  logger.info(`  POST http://localhost:${PORT}/api/debug-meeting`);
+  logger.info(`  POST  http://localhost:${PORT}/api/generate-summary`);
   logger.info('='.repeat(60));
 });
 

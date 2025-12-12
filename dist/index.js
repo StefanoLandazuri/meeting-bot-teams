@@ -10,6 +10,8 @@ const logger_1 = require("./utils/logger");
 const teamsBot_1 = require("./bot/teamsBot");
 const callingController_1 = require("./controllers/callingController");
 const authService_1 = require("./services/authService");
+const graphService_1 = require("./services/graphService");
+const uploadMiddleware_1 = require("./middleware/uploadMiddleware");
 const logger = (0, logger_1.createLogger)('Main');
 try {
     (0, config_1.validateConfig)();
@@ -19,7 +21,7 @@ catch (error) {
     process.exit(1);
 }
 const app = (0, express_1.default)();
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '50mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     logger.debug('Incoming request', {
@@ -133,6 +135,27 @@ app.post('/api/messages', async (req, res) => {
 app.post('/api/calling', callingController_1.handleCallingWebhook);
 app.post('/api/join-meeting', callingController_1.handleJoinMeeting);
 app.post('/api/process-transcript', callingController_1.handleProcessTranscript);
+app.post('/api/debug-meeting', callingController_1.handleDebugMeeting);
+app.post('/api/generate-summary', uploadMiddleware_1.upload.single('transcript'), callingController_1.handleGenerateSummary);
+app.post('/api/format-transcript', uploadMiddleware_1.upload.single('transcript'), callingController_1.handleGetFormattedTranscript);
+app.get('/api/list-meetings/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        logger.info('Listing meetings for user', { userId });
+        const meetings = await graphService_1.graphService.get(`/users/${userId}/onlineMeetings`);
+        res.json({
+            success: true,
+            meetings,
+        });
+    }
+    catch (error) {
+        logger.error('Failed to list meetings', error);
+        res.status(500).json({
+            error: 'Failed to list meetings',
+            details: error.message,
+        });
+    }
+});
 app.use((req, res) => {
     res.status(404).json({
         error: 'Not Found',
@@ -164,6 +187,8 @@ app.listen(PORT, () => {
     logger.info(`  POST http://localhost:${PORT}/api/calling`);
     logger.info(`  POST http://localhost:${PORT}/api/join-meeting`);
     logger.info(`  POST http://localhost:${PORT}/api/process-transcript`);
+    logger.info(`  POST http://localhost:${PORT}/api/debug-meeting`);
+    logger.info(`  POST  http://localhost:${PORT}/api/generate-summary`);
     logger.info('='.repeat(60));
 });
 process.on('SIGINT', () => {

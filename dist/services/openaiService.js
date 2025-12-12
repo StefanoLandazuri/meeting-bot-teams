@@ -76,7 +76,7 @@ Tu tarea es analizar transcripciones de reuniones y crear actas completas que in
 - Puntos clave discutidos
 - Decisiones tomadas
 - Items de acción con responsables (si se mencionan)
-- Próximos pasos
+- Infiere la fase del proyecto (si es posible)
 
 ${languageInstruction}
 
@@ -93,7 +93,7 @@ IMPORTANTE: Debes responder ÚNICAMENTE con un objeto JSON válido con esta estr
       "priority": "high|medium|low"
     }
   ],
-  "nextSteps": ["Próximo paso 1", "Próximo paso 2", ...]
+  "projectPhase": "Fase del proyecto inferida (si es posible)"
 }
 
 No incluyas markdown, no agregues explicaciones fuera del JSON, solo el objeto JSON puro.`;
