@@ -1,1 +1,0 @@
-{"version":3,"file":"teamsBot.d.ts","sourceRoot":"","sources":["../../src/bot/teamsBot.ts"],"names":[],"mappings":"AAKA,OAAO,EAAE,oBAAoB,EAAyB,MAAM,YAAY,CAAC;AAKzE,qBAAa,UAAW,SAAQ,oBAAoB;;YA4BpC,aAAa;YA2Bb,kBAAkB;YAqBlB,oBAAoB;YAepB,eAAe;IA+BvB,gBAAgB,CACpB,cAAc,EAAE,MAAM,EACtB,OAAO,EAAE,MAAM,GACd,OAAO,CAAC,IAAI,CAAC;CAgBjB"}
